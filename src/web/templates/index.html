@@ -825,6 +825,10 @@
           <div id="filterSummaryText" style="font-size: 0.8rem; color: #60a5fa; margin-top: 0.2rem;">Wird geladen...</div>
         </div>
         <div class="offers-header-controls">
+          <button type="button" id="toggleFilterBtn" class="btn btn-secondary" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;" title="Umschalten zwischen gefilterter und ungefilterter Ansicht">
+            <span id="toggleFilterIcon">🔍</span>
+            <span id="toggleFilterText">Filter aktiv</span>
+          </button>
           <div class="sort-control">
             <label for="sortSelect" class="sort-label">
               <span>↕️</span>
@@ -844,6 +848,13 @@
         </div>
       </div>
 
+      <div id="unfilteredBanner" style="display: none; background: rgba(59, 130, 246, 0.15); border: 1px solid rgba(59, 130, 246, 0.3); border-radius: var(--radius-sm); padding: 0.6rem 1rem; margin-bottom: 1rem; justify-content: space-between; align-items: center; font-size: 0.85rem; color: #93c5fd;">
+        <span>👀 <strong>Ungefilterte Ansicht:</strong> Es werden alle im Zweitmarkt verfügbaren Angebote angezeigt (Filter pausiert).</span>
+        <button type="button" id="restoreFilterBtn" class="btn btn-secondary" style="padding: 0.25rem 0.6rem; font-size: 0.75rem;">
+          Filter wieder anwenden
+        </button>
+      </div>
+
       <div id="offersContainer" class="offers-grid">
         <!-- Rendered dynamically -->
       </div>
@@ -851,9 +862,17 @@
       <div id="emptyOffersState" class="empty-state" style="display: none;">
         <div class="empty-icon">❄️</div>
         <h3 id="emptyTitle" style="font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-main);">Aktuell keine passenden Tickets im Zweitmarkt</h3>
-        <p id="emptyDesc" style="font-size: 0.85rem; max-width: 500px; margin: 0 auto;">
+        <p id="emptyDesc" style="font-size: 0.85rem; max-width: 500px; margin: 0 auto 1.25rem;">
           Sobald jemand ein Ticket einstellt, das deinen Filterkriterien entspricht, schlägt der Monitor sofort Alarm und das Angebot erscheint hier!
         </p>
+        <div id="emptyActionButtons" style="display: none; justify-content: center; gap: 0.75rem; flex-wrap: wrap;">
+          <button type="button" id="emptyShowAllBtn" class="btn btn-primary" style="font-size: 0.85rem;">
+            <span>👀 Alle <span id="emptyRawCount">0</span> Zweitmarkt-Funde anzeigen</span>
+          </button>
+          <button type="button" id="emptyResetFilterBtn" class="btn btn-secondary" style="font-size: 0.85rem;">
+            <span>↺ Filter zurücksetzen</span>
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1094,6 +1113,7 @@
     let lastSeenOffersCount = 0;
     let currentSlotsData = [];
     let currentSortOrder = localStorage.getItem('ravenna_sort_order') || 'date-asc';
+    let showAllOffers = false;
 
     // Elements
     const statusPill = document.getElementById('statusPill');
@@ -1104,6 +1124,15 @@
     const togglePauseText = document.getElementById('togglePauseText');
     const checkNowBtn = document.getElementById('checkNowBtn');
     const sortSelect = document.getElementById('sortSelect');
+    const toggleFilterBtn = document.getElementById('toggleFilterBtn');
+    const toggleFilterIcon = document.getElementById('toggleFilterIcon');
+    const toggleFilterText = document.getElementById('toggleFilterText');
+    const unfilteredBanner = document.getElementById('unfilteredBanner');
+    const restoreFilterBtn = document.getElementById('restoreFilterBtn');
+    const emptyShowAllBtn = document.getElementById('emptyShowAllBtn');
+    const emptyResetFilterBtn = document.getElementById('emptyResetFilterBtn');
+    const emptyActionButtons = document.getElementById('emptyActionButtons');
+    const emptyRawCount = document.getElementById('emptyRawCount');
     const offersContainer = document.getElementById('offersContainer');
     const emptyOffersState = document.getElementById('emptyOffersState');
     const offersCountBadge = document.getElementById('offersCountBadge');
@@ -1560,6 +1589,79 @@
       }
     }
 
+    function updateFilterToggleUI() {
+      if (showAllOffers) {
+        if (toggleFilterIcon) toggleFilterIcon.textContent = '👀';
+        if (toggleFilterText) toggleFilterText.textContent = 'Alle Funde (ungefiltert)';
+        if (toggleFilterBtn) toggleFilterBtn.className = 'btn btn-warning';
+        if (unfilteredBanner) unfilteredBanner.style.display = 'flex';
+      } else {
+        if (toggleFilterIcon) toggleFilterIcon.textContent = '🔍';
+        if (toggleFilterText) toggleFilterText.textContent = 'Filter aktiv';
+        if (toggleFilterBtn) toggleFilterBtn.className = 'btn btn-secondary';
+        if (unfilteredBanner) unfilteredBanner.style.display = 'none';
+      }
+    }
+
+    if (toggleFilterBtn) {
+      toggleFilterBtn.addEventListener('click', () => {
+        showAllOffers = !showAllOffers;
+        updateFilterToggleUI();
+        loadActiveSlots();
+        showToast(showAllOffers ? 'Zeige alle Zweitmarkt-Funde (Filter pausiert)' : 'Filter wieder aktiv', 'info');
+      });
+    }
+
+    if (restoreFilterBtn) {
+      restoreFilterBtn.addEventListener('click', () => {
+        showAllOffers = false;
+        updateFilterToggleUI();
+        loadActiveSlots();
+        showToast('Filter wieder aktiv', 'info');
+      });
+    }
+
+    if (emptyShowAllBtn) {
+      emptyShowAllBtn.addEventListener('click', () => {
+        showAllOffers = true;
+        updateFilterToggleUI();
+        loadActiveSlots();
+        showToast('Zeige alle Zweitmarkt-Funde', 'info');
+      });
+    }
+
+    if (emptyResetFilterBtn) {
+      emptyResetFilterBtn.addEventListener('click', async () => {
+        const payload = {
+          min_tickets: 1,
+          only_adults: false,
+          max_price_eur: null,
+          date_from: null,
+          date_to: null,
+          allowed_weekdays: [0, 1, 2, 3, 4, 5, 6],
+          earliest_time: null,
+          latest_time: null,
+          excluded_dates: [],
+          monitored_groups: [545832, 545884, 545886, 546305, 545934, 545947],
+        };
+        try {
+          await fetch('/api/config', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          showToast('Filter erfolgreich zurückgesetzt!', 'success');
+          showAllOffers = false;
+          updateFilterToggleUI();
+          await loadConfig();
+          await loadActiveSlots();
+          await updateStatus();
+        } catch (e) {
+          showToast('Fehler beim Zurücksetzen der Filter.', 'error');
+        }
+      });
+    }
+
     // Sort Select listener & initialization
     if (sortSelect) {
       const validOrders = ['date-asc', 'date-desc', 'tickets-desc', 'tickets-asc', 'price-asc', 'price-desc', 'group-asc'];
@@ -1581,7 +1683,7 @@
     // Render Active Tickets
     async function loadActiveSlots() {
       try {
-        const res = await fetch(`/api/active-slots?sort=${encodeURIComponent(currentSortOrder)}`);
+        const res = await fetch(`/api/active-slots?sort=${encodeURIComponent(currentSortOrder)}&show_all=${showAllOffers}`);
         const slots = await res.json();
         currentSlotsData = slots;
         const count = slots.length;
@@ -1612,14 +1714,19 @@
             const st = await statusRes.json();
             const emptyTitle = document.getElementById('emptyTitle');
             const emptyDesc = document.getElementById('emptyDesc');
-            if (st.total_raw_slots_count > 0) {
+            if (st.total_raw_slots_count > 0 && !showAllOffers) {
               emptyTitle.textContent = 'Keine Angebote entsprechen deinen Filtern';
               emptyDesc.textContent = `Auf dem Zweitmarkt sind derzeit ${st.total_raw_slots_count} Zeitfenster online, aber keines passt zu deinem Datumsbereich, Wochentagsfilter, Mindestanzahl (${currentConfig.min_tickets || 1}) oder Preisen.`;
+              if (emptyActionButtons) emptyActionButtons.style.display = 'flex';
+              if (emptyRawCount) emptyRawCount.textContent = st.total_raw_slots_count;
             } else {
               emptyTitle.textContent = 'Aktuell keine passenden Tickets im Zweitmarkt';
               emptyDesc.textContent = 'Sobald jemand ein Ticket einstellt, das deinen Filterkriterien entspricht, schlägt der Monitor sofort Alarm!';
+              if (emptyActionButtons) emptyActionButtons.style.display = 'none';
             }
           } catch(e) {}
+        } else {
+          if (emptyActionButtons) emptyActionButtons.style.display = 'none';
         }
       } catch (err) {
         console.error('Error loading active slots:', err);

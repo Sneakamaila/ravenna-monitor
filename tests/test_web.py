@@ -16,6 +16,7 @@ def monitor_instance(tmp_path: Path):
     config = Config(
         discord_webhook_url="https://discord.com/api/webhooks/dummy",
         state_file_path=tmp_path / "seen.json",
+        env_file_path=tmp_path / ".env",
     )
     tracker = OfferTracker(config.state_file_path)
     client = ReservixClient()
@@ -226,4 +227,50 @@ async def test_active_slots_sorting(monitor_instance, test_app):
         res = await ac.get("/api/active-slots?sort=group-asc")
         data = res.json()
         assert [s["sync_id"] for s in data] == ["102", "101"]
+
+
+@pytest.mark.anyio
+async def test_config_handles_none_values(test_app, monitor_instance):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=test_app), base_url="http://test") as ac:
+        resp = await ac.post("/api/config", json={
+            "earliest_time": None,
+            "latest_time": None,
+            "date_from": None,
+            "date_to": None,
+        })
+        assert resp.status_code == 200
+        assert monitor_instance.config.earliest_time is None
+        assert monitor_instance.config.latest_time is None
+        assert monitor_instance.config.date_from is None
+        assert monitor_instance.config.date_to is None
+
+
+@pytest.mark.anyio
+async def test_active_slots_show_all(test_app, monitor_instance):
+    slot = EventSlot(
+        id=99,
+        sync_id="999",
+        name="Out of filter slot",
+        start_date_time=datetime(2026, 11, 26, 16, 0),
+        end_date_time=datetime(2026, 11, 26, 18, 0),
+        url_path="p",
+        is_bookable=True,
+    )
+    avail = SlotAvailability(slot=slot, offers=[
+        TicketOffer(id=1, price_cents=500, currency="EUR", price_category="Kinder", status="BOOKABLE")
+    ])
+    monitor_instance.raw_active_slots = [avail]
+    # Set config to only adults (so avail is filtered out)
+    monitor_instance.config.only_adults = True
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=test_app), base_url="http://test") as ac:
+        # Filtered should be empty
+        res1 = await ac.get("/api/active-slots?show_all=false")
+        assert len(res1.json()) == 0
+
+        # show_all=true should return the raw slot
+        res2 = await ac.get("/api/active-slots?show_all=true")
+        assert len(res2.json()) == 1
+        assert res2.json()[0]["sync_id"] == "999"
+
 

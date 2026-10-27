@@ -82,17 +82,17 @@ class TicketMonitor:
         slot_date = slot.start_date_time.date()
 
         # 1. Date Range Filter ("YYYY-MM-DD")
-        if self.config.date_from:
+        if self.config.date_from and self.config.date_from.strip().lower() not in ("none", "null", ""):
             try:
-                from_d = datetime.strptime(self.config.date_from, "%Y-%m-%d").date()
+                from_d = datetime.strptime(self.config.date_from.strip(), "%Y-%m-%d").date()
                 if slot_date < from_d:
                     return False
             except ValueError:
                 pass
 
-        if self.config.date_to:
+        if self.config.date_to and self.config.date_to.strip().lower() not in ("none", "null", ""):
             try:
-                to_d = datetime.strptime(self.config.date_to, "%Y-%m-%d").date()
+                to_d = datetime.strptime(self.config.date_to.strip(), "%Y-%m-%d").date()
                 if slot_date > to_d:
                     return False
             except ValueError:
@@ -107,12 +107,19 @@ class TicketMonitor:
         if date_str in self.config.excluded_dates:
             return False
 
-        # 4. Time filter (HH:MM)
+        # 4. Time filter (HH:MM) - strictly validate 5-char format before string comparison
         time_str = slot.start_date_time.strftime("%H:%M")
-        if self.config.earliest_time and time_str < self.config.earliest_time:
-            return False
-        if self.config.latest_time and time_str > self.config.latest_time:
-            return False
+        if self.config.earliest_time and self.config.earliest_time.strip().lower() not in ("none", "null", ""):
+            et = self.config.earliest_time.strip()
+            if len(et) == 5 and et[2] == ":":
+                if time_str < et:
+                    return False
+
+        if self.config.latest_time and self.config.latest_time.strip().lower() not in ("none", "null", ""):
+            lt = self.config.latest_time.strip()
+            if len(lt) == 5 and lt[2] == ":":
+                if time_str > lt:
+                    return False
 
         return True
 

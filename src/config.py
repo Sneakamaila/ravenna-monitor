@@ -52,11 +52,20 @@ class Config:
     web_host: str = "0.0.0.0"
     web_port: int = 8080
     paused: bool = False
+    env_file_path: Path = field(default_factory=lambda: Path(".env"))
 
     @classmethod
     def from_env(cls) -> "Config":
-        webhook = os.getenv("DISCORD_WEBHOOK_URL", "").strip() or None
-        mention = os.getenv("DISCORD_MENTION", "").strip() or None
+        def clean_env_str(val: Optional[str]) -> Optional[str]:
+            if not val:
+                return None
+            v = val.strip()
+            if not v or v.lower() in ("none", "null", "undefined"):
+                return None
+            return v
+
+        webhook = clean_env_str(os.getenv("DISCORD_WEBHOOK_URL"))
+        mention = clean_env_str(os.getenv("DISCORD_MENTION"))
 
         interval_raw = os.getenv("CHECK_INTERVAL_SECONDS", "30").strip()
         try:
@@ -106,10 +115,10 @@ class Config:
         else:
             allowed_weekdays = [0, 1, 2, 3, 4, 5, 6]
 
-        earliest = os.getenv("EARLIEST_TIME", "").strip() or None
-        latest = os.getenv("LATEST_TIME", "").strip() or None
-        date_from = os.getenv("DATE_FROM", "").strip() or None
-        date_to = os.getenv("DATE_TO", "").strip() or None
+        earliest = clean_env_str(os.getenv("EARLIEST_TIME"))
+        latest = clean_env_str(os.getenv("LATEST_TIME"))
+        date_from = clean_env_str(os.getenv("DATE_FROM"))
+        date_to = clean_env_str(os.getenv("DATE_TO"))
 
         max_price_raw = os.getenv("MAX_PRICE_EUR", "").strip()
         max_price: Optional[float] = None
@@ -120,7 +129,7 @@ class Config:
                 max_price = None
 
         excluded_raw = os.getenv("EXCLUDED_DATES", "").strip()
-        excluded_dates = [d.strip() for d in excluded_raw.split(",") if d.strip()] if excluded_raw else []
+        excluded_dates = [d.strip() for d in excluded_raw.split(",") if d.strip() and d.strip().lower() not in ("none", "null")] if excluded_raw else []
 
         web_host = os.getenv("WEB_HOST", "0.0.0.0").strip()
         try:
@@ -175,12 +184,18 @@ class Config:
         }
 
     def update_from_dict(self, data: Dict[str, Any]):
+        def clean_optional_str(key: str) -> Optional[str]:
+            if key not in data or data[key] is None:
+                return None
+            v = str(data[key]).strip()
+            if not v or v.lower() in ("none", "null", "undefined"):
+                return None
+            return v
+
         if "discord_webhook_url" in data:
-            val = str(data["discord_webhook_url"]).strip()
-            self.discord_webhook_url = val or None
+            self.discord_webhook_url = clean_optional_str("discord_webhook_url")
         if "discord_mention" in data:
-            val = str(data["discord_mention"]).strip()
-            self.discord_mention = val or None
+            self.discord_mention = clean_optional_str("discord_mention")
         if "check_interval_seconds" in data:
             try:
                 self.check_interval_seconds = max(5, int(data["check_interval_seconds"]))
@@ -203,17 +218,13 @@ class Config:
         if "allowed_weekdays" in data and isinstance(data["allowed_weekdays"], list):
             self.allowed_weekdays = [int(w) for w in data["allowed_weekdays"] if 0 <= int(w) <= 6]
         if "date_from" in data:
-            val = str(data["date_from"]).strip()
-            self.date_from = val or None
+            self.date_from = clean_optional_str("date_from")
         if "date_to" in data:
-            val = str(data["date_to"]).strip()
-            self.date_to = val or None
+            self.date_to = clean_optional_str("date_to")
         if "earliest_time" in data:
-            val = str(data["earliest_time"]).strip()
-            self.earliest_time = val or None
+            self.earliest_time = clean_optional_str("earliest_time")
         if "latest_time" in data:
-            val = str(data["latest_time"]).strip()
-            self.latest_time = val or None
+            self.latest_time = clean_optional_str("latest_time")
         if "max_price_eur" in data:
             try:
                 val = float(data["max_price_eur"]) if data["max_price_eur"] not in (None, "", 0) else None
@@ -221,12 +232,16 @@ class Config:
             except (ValueError, TypeError):
                 self.max_price_eur = None
         if "excluded_dates" in data and isinstance(data["excluded_dates"], list):
-            self.excluded_dates = [str(d).strip() for d in data["excluded_dates"] if str(d).strip()]
+            self.excluded_dates = [
+                str(d).strip() for d in data["excluded_dates"]
+                if str(d).strip() and str(d).strip().lower() not in ("none", "null")
+            ]
         if "paused" in data:
             self.paused = bool(data["paused"])
 
-    def save_to_env_file(self, env_path: Path = Path(".env")):
+    def save_to_env_file(self, env_path: Optional[Path] = None):
         """Persist current configuration to .env file."""
+        target_path = env_path or self.env_file_path
         lines = [
             f"DISCORD_WEBHOOK_URL={self.discord_webhook_url or ''}\n",
             f"DISCORD_MENTION={self.discord_mention or ''}\n",
@@ -248,7 +263,7 @@ class Config:
             f"LOG_LEVEL={self.log_level}\n",
         ]
         try:
-            with open(env_path, "w", encoding="utf-8") as f:
+            with open(target_path, "w", encoding="utf-8") as f:
                 f.writelines(lines)
-        except Exception as e:
+        except Exception:
             pass

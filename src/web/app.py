@@ -83,9 +83,13 @@ def create_app(monitor: TicketMonitor) -> FastAPI:
         }
 
     @app.get("/api/active-slots")
-    async def get_active_slots(sort: Optional[str] = "date-asc"):
-        filtered = monitor.get_filtered_active_slots()
-        sorted_slots = sort_slot_availabilities(filtered, sort or "date-asc")
+    async def get_active_slots(sort: Optional[str] = "date-asc", show_all: bool = False):
+        if show_all:
+            source_slots = monitor.raw_active_slots
+        else:
+            source_slots = monitor.get_filtered_active_slots()
+
+        sorted_slots = sort_slot_availabilities(source_slots, sort or "date-asc")
         slots_data = []
         for avail in sorted_slots:
             slot = avail.slot
