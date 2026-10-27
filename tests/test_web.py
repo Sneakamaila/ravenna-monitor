@@ -35,6 +35,7 @@ async def test_web_index(test_app):
         assert resp.status_code == 200
         assert "Ravenna-Schlucht Ticket-Monitor" in resp.text
         assert "dateFrom" in resp.text
+        assert "sortSelect" in resp.text
 
 
 @pytest.mark.anyio
@@ -150,3 +151,79 @@ async def test_dynamic_filter_applied_to_active_slots(monitor_instance, test_app
         slots3 = res3.json()
         assert len(slots3) == 1
         assert slots3[0]["sync_id"] == "1001"
+
+
+@pytest.mark.anyio
+async def test_active_slots_sorting(monitor_instance, test_app):
+    slot_early = EventSlot(
+        id=1,
+        sync_id="101",
+        name="Slot A - Titisee",
+        start_date_time=datetime(2026, 12, 4, 15, 0),
+        end_date_time=datetime(2026, 12, 4, 17, 0),
+        url_path="p1",
+        is_bookable=True,
+        group_id=545832,
+        group_name="Titisee Shuttle",
+    )
+    # 1 ticket at 20.00 EUR
+    avail_early = SlotAvailability(slot=slot_early, offers=[
+        TicketOffer(id=1, price_cents=2000, currency="EUR", price_category="Erwachsene", status="BOOKABLE")
+    ])
+
+    slot_late = EventSlot(
+        id=2,
+        sync_id="102",
+        name="Slot B - Freiburg",
+        start_date_time=datetime(2026, 12, 11, 17, 0),
+        end_date_time=datetime(2026, 12, 11, 19, 0),
+        url_path="p2",
+        is_bookable=True,
+        group_id=546305,
+        group_name="Freiburg Shuttle",
+    )
+    # 3 tickets at 10.00 EUR each
+    avail_late = SlotAvailability(slot=slot_late, offers=[
+        TicketOffer(id=2, price_cents=1000, currency="EUR", price_category="Erwachsene", status="BOOKABLE"),
+        TicketOffer(id=3, price_cents=1000, currency="EUR", price_category="Erwachsene", status="BOOKABLE"),
+        TicketOffer(id=4, price_cents=1000, currency="EUR", price_category="Erwachsene", status="BOOKABLE"),
+    ])
+
+    monitor_instance.raw_active_slots = [avail_early, avail_late]
+
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=test_app), base_url="http://test") as ac:
+        # Default sort (date-asc)
+        res = await ac.get("/api/active-slots?sort=date-asc")
+        data = res.json()
+        assert [s["sync_id"] for s in data] == ["101", "102"]
+
+        # Date descending
+        res = await ac.get("/api/active-slots?sort=date-desc")
+        data = res.json()
+        assert [s["sync_id"] for s in data] == ["102", "101"]
+
+        # Tickets descending (102 has 3 tickets, 101 has 1)
+        res = await ac.get("/api/active-slots?sort=tickets-desc")
+        data = res.json()
+        assert [s["sync_id"] for s in data] == ["102", "101"]
+
+        # Tickets ascending
+        res = await ac.get("/api/active-slots?sort=tickets-asc")
+        data = res.json()
+        assert [s["sync_id"] for s in data] == ["101", "102"]
+
+        # Price ascending (102 is 10 EUR, 101 is 20 EUR)
+        res = await ac.get("/api/active-slots?sort=price-asc")
+        data = res.json()
+        assert [s["sync_id"] for s in data] == ["102", "101"]
+
+        # Price descending (101 is 20 EUR, 102 is 10 EUR)
+        res = await ac.get("/api/active-slots?sort=price-desc")
+        data = res.json()
+        assert [s["sync_id"] for s in data] == ["101", "102"]
+
+        # Group name ascending ("Freiburg" before "Titisee")
+        res = await ac.get("/api/active-slots?sort=group-asc")
+        data = res.json()
+        assert [s["sync_id"] for s in data] == ["102", "101"]
+

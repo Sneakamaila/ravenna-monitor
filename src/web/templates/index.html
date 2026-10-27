@@ -306,8 +306,57 @@
     .offers-header {
       display: flex;
       justify-content: space-between;
+      align-items: flex-end;
+      flex-wrap: wrap;
+      gap: 1rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .offers-header-controls {
+      display: flex;
       align-items: center;
-      margin-bottom: 1rem;
+      gap: 0.85rem;
+      flex-wrap: wrap;
+    }
+
+    .sort-control {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--bg-card);
+      border: 1px solid var(--border-color);
+      border-radius: var(--radius-sm);
+      padding: 0.3rem 0.65rem;
+      transition: border-color 0.15s ease;
+    }
+
+    .sort-control:focus-within, .sort-control:hover {
+      border-color: var(--accent-blue);
+    }
+
+    .sort-label {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      font-weight: 600;
+      white-space: nowrap;
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .sort-select {
+      background: transparent;
+      border: none;
+      color: var(--text-main);
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      outline: none;
+    }
+
+    .sort-select option {
+      background-color: var(--bg-card);
+      color: var(--text-main);
     }
 
     .offers-grid {
@@ -775,7 +824,24 @@
           <h2 style="font-size: 1.15rem; font-weight: 700;">Gefundene Zweitmarkt-Angebote</h2>
           <div id="filterSummaryText" style="font-size: 0.8rem; color: #60a5fa; margin-top: 0.2rem;">Wird geladen...</div>
         </div>
-        <span style="font-size: 0.85rem; color: var(--text-muted);" id="offersTimestamp">Stand: soeben</span>
+        <div class="offers-header-controls">
+          <div class="sort-control">
+            <label for="sortSelect" class="sort-label">
+              <span>↕️</span>
+              <span>Sortierung:</span>
+            </label>
+            <select id="sortSelect" class="sort-select" title="Ergebnisse sortieren">
+              <option value="date-asc">📅 Datum (Früheste zuerst)</option>
+              <option value="date-desc">📅 Datum (Späteste zuerst)</option>
+              <option value="tickets-desc">🔢 Meiste Tickets (Paare/Gruppen)</option>
+              <option value="tickets-asc">🔢 Wenigste Tickets</option>
+              <option value="price-asc">💰 Günstigste Tickets (€ ↑)</option>
+              <option value="price-desc">💰 Höchste Ticketpreise (€ ↓)</option>
+              <option value="group-asc">📍 Anreise-Ort (A–Z)</option>
+            </select>
+          </div>
+          <span style="font-size: 0.85rem; color: var(--text-muted);" id="offersTimestamp">Stand: soeben</span>
+        </div>
       </div>
 
       <div id="offersContainer" class="offers-grid">
@@ -1026,6 +1092,8 @@
     let selectedWeekdays = new Set([0, 1, 2, 3, 4, 5, 6]);
     let audioContext = null;
     let lastSeenOffersCount = 0;
+    let currentSlotsData = [];
+    let currentSortOrder = localStorage.getItem('ravenna_sort_order') || 'date-asc';
 
     // Elements
     const statusPill = document.getElementById('statusPill');
@@ -1035,6 +1103,7 @@
     const togglePauseIcon = document.getElementById('togglePauseIcon');
     const togglePauseText = document.getElementById('togglePauseText');
     const checkNowBtn = document.getElementById('checkNowBtn');
+    const sortSelect = document.getElementById('sortSelect');
     const offersContainer = document.getElementById('offersContainer');
     const emptyOffersState = document.getElementById('emptyOffersState');
     const offersCountBadge = document.getElementById('offersCountBadge');
@@ -1403,70 +1472,140 @@
       }
     }
 
+    // Sorting helper
+    function sortSlots(slots, order) {
+      const sorted = [...slots];
+      switch (order) {
+        case 'date-desc':
+          sorted.sort((a, b) => new Date(b.start_iso) - new Date(a.start_iso));
+          break;
+        case 'tickets-desc':
+          sorted.sort((a, b) => (b.total_tickets - a.total_tickets) || (new Date(a.start_iso) - new Date(b.start_iso)));
+          break;
+        case 'tickets-asc':
+          sorted.sort((a, b) => (a.total_tickets - b.total_tickets) || (new Date(a.start_iso) - new Date(b.start_iso)));
+          break;
+        case 'price-asc':
+          sorted.sort((a, b) => {
+            const pa = a.min_price_eur != null ? a.min_price_eur : Infinity;
+            const pb = b.min_price_eur != null ? b.min_price_eur : Infinity;
+            return (pa - pb) || (new Date(a.start_iso) - new Date(b.start_iso));
+          });
+          break;
+        case 'price-desc':
+          sorted.sort((a, b) => {
+            const pa = a.max_price_eur != null ? a.max_price_eur : -Infinity;
+            const pb = b.max_price_eur != null ? b.max_price_eur : -Infinity;
+            return (pb - pa) || (new Date(a.start_iso) - new Date(b.start_iso));
+          });
+          break;
+        case 'group-asc':
+          sorted.sort((a, b) => a.group_name.localeCompare(b.group_name, 'de') || (new Date(a.start_iso) - new Date(b.start_iso)));
+          break;
+        case 'date-asc':
+        default:
+          sorted.sort((a, b) => new Date(a.start_iso) - new Date(b.start_iso));
+          break;
+      }
+      return sorted;
+    }
+
+    // Render Sorted Offers Cards
+    function renderOffersList(slots) {
+      offersContainer.innerHTML = '';
+      const sorted = sortSlots(slots, currentSortOrder);
+      const count = sorted.length;
+
+      if (count > 0) {
+        emptyOffersState.style.display = 'none';
+        offersCountBadge.style.display = 'inline-block';
+        offersCountBadge.textContent = count;
+
+        sorted.forEach(slot => {
+          const card = document.createElement('div');
+          card.className = 'offer-card';
+
+          const itemsHtml = slot.offers.map(o => `
+            <li class="slot-item">
+              <span>${o.price_category}</span>
+              <span class="slot-item-price">${o.formatted_price}</span>
+            </li>
+          `).join('');
+
+          const totalEur = (slot.offers.reduce((sum, o) => sum + o.price_cents, 0) / 100).toFixed(2).replace('.', ',');
+
+          card.innerHTML = `
+            <div>
+              <div class="offer-top">
+                <span class="group-badge">${slot.group_name}</span>
+                <span class="ticket-count-badge">${slot.total_tickets} Ticket(s)</span>
+              </div>
+              <div class="slot-date">📅 ${slot.formatted_start}</div>
+              <ul class="slot-items">
+                ${itemsHtml}
+              </ul>
+            </div>
+            <div class="offer-footer">
+              <div class="total-price">Gesamt: ${totalEur} €</div>
+              <a href="${slot.buy_url}" target="_blank" rel="noopener noreferrer" class="btn btn-success" style="padding: 0.4rem 0.85rem; font-size: 0.8rem;">
+                <span>🛒 Jetzt kaufen ↗</span>
+              </a>
+            </div>
+          `;
+          offersContainer.appendChild(card);
+        });
+      } else {
+        offersCountBadge.style.display = 'none';
+        emptyOffersState.style.display = 'block';
+      }
+    }
+
+    // Sort Select listener & initialization
+    if (sortSelect) {
+      const validOrders = ['date-asc', 'date-desc', 'tickets-desc', 'tickets-asc', 'price-asc', 'price-desc', 'group-asc'];
+      if (validOrders.includes(currentSortOrder)) {
+        sortSelect.value = currentSortOrder;
+      } else {
+        currentSortOrder = 'date-asc';
+        sortSelect.value = 'date-asc';
+      }
+
+      sortSelect.addEventListener('change', () => {
+        currentSortOrder = sortSelect.value;
+        localStorage.setItem('ravenna_sort_order', currentSortOrder);
+        renderOffersList(currentSlotsData);
+        showToast(`Sortierung: ${sortSelect.options[sortSelect.selectedIndex].text}`, 'info');
+      });
+    }
+
     // Render Active Tickets
     async function loadActiveSlots() {
       try {
-        const res = await fetch('/api/active-slots');
+        const res = await fetch(`/api/active-slots?sort=${encodeURIComponent(currentSortOrder)}`);
         const slots = await res.json();
-
-        offersContainer.innerHTML = '';
+        currentSlotsData = slots;
         const count = slots.length;
 
-        if (count > 0) {
-          emptyOffersState.style.display = 'none';
-          offersCountBadge.style.display = 'inline-block';
-          offersCountBadge.textContent = count;
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString('de-DE');
+        const tsEl = document.getElementById('offersTimestamp');
+        if (tsEl) tsEl.textContent = `Stand: ${timeStr}`;
 
-          // Chime if new offers arrived
-          if (count > lastSeenOffersCount) {
-            playChime();
-            showToast(`🎉 ${count - lastSeenOffersCount} neue(s) Ticket-Zeitfenster entdeckt!`, 'success');
+        // Chime if new offers arrived
+        if (count > lastSeenOffersCount) {
+          playChime();
+          showToast(`🎉 ${count - lastSeenOffersCount} neue(s) Ticket-Zeitfenster entdeckt!`, 'success');
 
-            // Auto-open in tab if enabled
-            if (document.getElementById('autoOpenToggle').checked && slots[0]) {
-              window.open(slots[0].buy_url, '_blank');
-            }
+          // Auto-open in tab if enabled
+          if (document.getElementById('autoOpenToggle').checked && slots[0]) {
+            window.open(slots[0].buy_url, '_blank');
           }
-          lastSeenOffersCount = count;
+        }
+        lastSeenOffersCount = count;
 
-          slots.forEach(slot => {
-            const card = document.createElement('div');
-            card.className = 'offer-card';
+        renderOffersList(currentSlotsData);
 
-            const itemsHtml = slot.offers.map(o => `
-              <li class="slot-item">
-                <span>${o.price_category}</span>
-                <span class="slot-item-price">${o.formatted_price}</span>
-              </li>
-            `).join('');
-
-            const totalEur = (slot.offers.reduce((sum, o) => sum + o.price_cents, 0) / 100).toFixed(2).replace('.', ',');
-
-            card.innerHTML = `
-              <div>
-                <div class="offer-top">
-                  <span class="group-badge">${slot.group_name}</span>
-                  <span class="ticket-count-badge">${slot.total_tickets} Ticket(s)</span>
-                </div>
-                <div class="slot-date">📅 ${slot.formatted_start}</div>
-                <ul class="slot-items">
-                  ${itemsHtml}
-                </ul>
-              </div>
-              <div class="offer-footer">
-                <div class="total-price">Gesamt: ${totalEur} €</div>
-                <a href="${slot.buy_url}" target="_blank" rel="noopener noreferrer" class="btn btn-success" style="padding: 0.4rem 0.85rem; font-size: 0.8rem;">
-                  <span>🛒 Jetzt kaufen ↗</span>
-                </a>
-              </div>
-            `;
-            offersContainer.appendChild(card);
-          });
-        } else {
-          lastSeenOffersCount = 0;
-          offersCountBadge.style.display = 'none';
-          emptyOffersState.style.display = 'block';
-
+        if (count === 0) {
           // Check if offers exist on platform but were filtered out
           try {
             const statusRes = await fetch('/api/status');

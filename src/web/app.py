@@ -35,6 +35,24 @@ class ConfigUpdateRequest(BaseModel):
     paused: Optional[bool] = None
 
 
+def sort_slot_availabilities(slots: List[SlotAvailability], sort_order: str) -> List[SlotAvailability]:
+    order = (sort_order or "date-asc").lower().replace("_", "-")
+    if order == "date-desc":
+        return sorted(slots, key=lambda a: a.slot.start_date_time, reverse=True)
+    elif order == "tickets-desc":
+        return sorted(slots, key=lambda a: (a.total_tickets, -a.slot.start_date_time.timestamp()), reverse=True)
+    elif order == "tickets-asc":
+        return sorted(slots, key=lambda a: (a.total_tickets, a.slot.start_date_time.timestamp()))
+    elif order == "price-asc":
+        return sorted(slots, key=lambda a: (a.min_price_eur if a.min_price_eur is not None else float("inf"), a.slot.start_date_time.timestamp()))
+    elif order == "price-desc":
+        return sorted(slots, key=lambda a: (a.max_price_eur if a.max_price_eur is not None else float("-inf"), -a.slot.start_date_time.timestamp()), reverse=True)
+    elif order == "group-asc":
+        return sorted(slots, key=lambda a: (a.slot.group_name.lower(), a.slot.start_date_time.timestamp()))
+    else:  # date-asc (default)
+        return sorted(slots, key=lambda a: a.slot.start_date_time)
+
+
 def create_app(monitor: TicketMonitor) -> FastAPI:
     app = FastAPI(title="Ravenna Ticket Monitor", version="1.0.0")
 
@@ -65,9 +83,11 @@ def create_app(monitor: TicketMonitor) -> FastAPI:
         }
 
     @app.get("/api/active-slots")
-    async def get_active_slots():
+    async def get_active_slots(sort: Optional[str] = "date-asc"):
+        filtered = monitor.get_filtered_active_slots()
+        sorted_slots = sort_slot_availabilities(filtered, sort or "date-asc")
         slots_data = []
-        for avail in monitor.get_filtered_active_slots():
+        for avail in sorted_slots:
             slot = avail.slot
             offers_data = [
                 {
