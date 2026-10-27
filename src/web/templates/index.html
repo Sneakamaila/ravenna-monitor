@@ -727,12 +727,12 @@
     <!-- Stats Bar -->
     <div class="stats-grid">
       <div class="stat-card">
-        <div class="stat-label">Aktuell buchbare Slots</div>
+        <div class="stat-label">Passende Zeitfenster</div>
         <div class="stat-value">
           <span id="statActiveSlots">0</span>
           <span style="font-size: 1rem; color: #34d399;">Slots</span>
         </div>
-        <div class="stat-sub">Live auf dem Zweitmarkt</div>
+        <div class="stat-sub" id="statActiveSub">Live auf dem Zweitmarkt</div>
       </div>
 
       <div class="stat-card">
@@ -771,7 +771,10 @@
     <!-- Tab 1: Available Tickets -->
     <div id="tab-offers" class="tab-content active">
       <div class="offers-header">
-        <h2 style="font-size: 1.15rem; font-weight: 700;">Gefundene Zweitmarkt-Angebote</h2>
+        <div>
+          <h2 style="font-size: 1.15rem; font-weight: 700;">Gefundene Zweitmarkt-Angebote</h2>
+          <div id="filterSummaryText" style="font-size: 0.8rem; color: #60a5fa; margin-top: 0.2rem;">Wird geladen...</div>
+        </div>
         <span style="font-size: 0.85rem; color: var(--text-muted);" id="offersTimestamp">Stand: soeben</span>
       </div>
 
@@ -781,8 +784,8 @@
 
       <div id="emptyOffersState" class="empty-state" style="display: none;">
         <div class="empty-icon">❄️</div>
-        <h3 style="font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-main);">Aktuell keine Tickets im Zweitmarkt</h3>
-        <p style="font-size: 0.85rem; max-width: 450px; margin: 0 auto;">
+        <h3 id="emptyTitle" style="font-size: 1.1rem; margin-bottom: 0.5rem; color: var(--text-main);">Aktuell keine passenden Tickets im Zweitmarkt</h3>
+        <p id="emptyDesc" style="font-size: 0.85rem; max-width: 500px; margin: 0 auto;">
           Sobald jemand ein Ticket einstellt, das deinen Filterkriterien entspricht, schlägt der Monitor sofort Alarm und das Angebot erscheint hier!
         </p>
       </div>
@@ -821,11 +824,35 @@
             </div>
           </div>
 
-          <!-- Card 2: Zeit- & Wochentagsfilter -->
+          <!-- Card 2: Zeit- & Datumsfilter -->
           <div class="settings-card">
-            <h3 class="card-title">📅 Zeit- & Wochentagsfilter</h3>
+            <h3 class="card-title">📅 Zeit- & Datumsfilter</h3>
 
+            <!-- Datumsbereich Filter -->
             <div class="form-group">
+              <label class="form-label">📅 Gesuchter Datumsbereich (Zeitraum)</label>
+              <div class="quick-preset-btns" style="flex-wrap: wrap;">
+                <button type="button" class="quick-preset-btn" id="presetSeason">Ganze Saison</button>
+                <button type="button" class="quick-preset-btn" id="presetAdv1">1. Advent (26.–29.11.)</button>
+                <button type="button" class="quick-preset-btn" id="presetAdv2">2. Advent (03.–06.12.)</button>
+                <button type="button" class="quick-preset-btn" id="presetAdv3">3. Advent (10.–13.12.)</button>
+                <button type="button" class="quick-preset-btn" id="presetAdv4">4. Advent (17.–20.12.)</button>
+              </div>
+
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-top: 0.4rem;">
+                <div>
+                  <label class="form-label" for="dateFrom" style="font-size: 0.75rem; color: var(--text-muted);">Frühestes Datum (Von)</label>
+                  <input type="date" id="dateFrom" name="date_from" class="form-control">
+                </div>
+                <div>
+                  <label class="form-label" for="dateTo" style="font-size: 0.75rem; color: var(--text-muted);">Spätestes Datum (Bis)</label>
+                  <input type="date" id="dateTo" name="date_to" class="form-control">
+                </div>
+              </div>
+              <div class="form-desc" style="margin-top: 0.35rem;">Filtert vorhandene und neue Suchergebnisse strikt auf diesen Zeitraum.</div>
+            </div>
+
+            <div class="form-group" style="border-top: 1px solid var(--border-color); padding-top: 0.75rem;">
               <label class="form-label">Erlaubte Wochentage</label>
               <div class="quick-preset-btns">
                 <button type="button" class="quick-preset-btn" id="presetAllDays">Alle Tage</button>
@@ -1123,6 +1150,59 @@
       updateWeekdayUI();
     });
 
+    // Date Range Presets
+    document.getElementById('presetSeason').addEventListener('click', () => {
+      document.getElementById('dateFrom').value = '';
+      document.getElementById('dateTo').value = '';
+    });
+    document.getElementById('presetAdv1').addEventListener('click', () => {
+      document.getElementById('dateFrom').value = '2026-11-26';
+      document.getElementById('dateTo').value = '2026-11-29';
+    });
+    document.getElementById('presetAdv2').addEventListener('click', () => {
+      document.getElementById('dateFrom').value = '2026-12-03';
+      document.getElementById('dateTo').value = '2026-12-06';
+    });
+    document.getElementById('presetAdv3').addEventListener('click', () => {
+      document.getElementById('dateFrom').value = '2026-12-10';
+      document.getElementById('dateTo').value = '2026-12-13';
+    });
+    document.getElementById('presetAdv4').addEventListener('click', () => {
+      document.getElementById('dateFrom').value = '2026-12-17';
+      document.getElementById('dateTo').value = '2026-12-20';
+    });
+
+    function updateFilterSummary(cfg) {
+      const parts = [];
+      if (cfg.date_from && cfg.date_to) {
+        parts.push(`Zeitraum: ${cfg.date_from} bis ${cfg.date_to}`);
+      } else if (cfg.date_from) {
+        parts.push(`Ab ${cfg.date_from}`);
+      } else if (cfg.date_to) {
+        parts.push(`Bis ${cfg.date_to}`);
+      }
+      if (cfg.min_tickets > 1) {
+        parts.push(`Mind. ${cfg.min_tickets} Tickets`);
+      }
+      if (cfg.only_adults) {
+        parts.push(`Nur Erwachsene`);
+      }
+      if (cfg.max_price_eur) {
+        parts.push(`Max. ${parseFloat(cfg.max_price_eur).toFixed(2)} €`);
+      }
+      if (cfg.allowed_weekdays && cfg.allowed_weekdays.length < 7) {
+        const days = ['Mo','Di','Mi','Do','Fr','Sa','So'];
+        parts.push(`Tage: ${cfg.allowed_weekdays.map(d => days[d]).join(', ')}`);
+      }
+      if (cfg.earliest_time || cfg.latest_time) {
+        parts.push(`Uhrzeit: ${cfg.earliest_time || '00:00'}–${cfg.latest_time || '23:59'}`);
+      }
+      const el = document.getElementById('filterSummaryText');
+      if (el) {
+        el.textContent = parts.length > 0 ? `Aktive Filter: ${parts.join(' • ')}` : 'Keine Filter aktiv (zeigt alle Funde)';
+      }
+    }
+
     // Range slider label
     const intervalSlider = document.getElementById('checkInterval');
     const intervalValue = document.getElementById('intervalValue');
@@ -1142,9 +1222,13 @@
         document.getElementById('minTickets').value = cfg.min_tickets || 1;
         document.getElementById('onlyAdults').checked = Boolean(cfg.only_adults);
         document.getElementById('maxPrice').value = cfg.max_price_eur || '';
+        document.getElementById('dateFrom').value = cfg.date_from || '';
+        document.getElementById('dateTo').value = cfg.date_to || '';
         document.getElementById('earliestTime').value = cfg.earliest_time || '';
         document.getElementById('latestTime').value = cfg.latest_time || '';
         document.getElementById('excludedDates').value = (cfg.excluded_dates || []).join(', ');
+
+        updateFilterSummary(cfg);
 
         intervalSlider.value = cfg.check_interval_seconds || 30;
         intervalValue.textContent = intervalSlider.value + 's';
@@ -1179,6 +1263,8 @@
         min_tickets: parseInt(document.getElementById('minTickets').value) || 1,
         only_adults: document.getElementById('onlyAdults').checked,
         max_price_eur: parseFloat(document.getElementById('maxPrice').value) || null,
+        date_from: document.getElementById('dateFrom').value || null,
+        date_to: document.getElementById('dateTo').value || null,
         allowed_weekdays: Array.from(selectedWeekdays),
         earliest_time: document.getElementById('earliestTime').value || null,
         latest_time: document.getElementById('latestTime').value || null,
@@ -1195,8 +1281,10 @@
           body: JSON.stringify(payload)
         });
         if (res.ok) {
-          showToast('Einstellungen erfolgreich gespeichert und in .env gesichert!', 'success');
-          loadConfig();
+          showToast('Filter & Einstellungen erfolgreich gespeichert!', 'success');
+          await loadConfig();
+          await loadActiveSlots();
+          await updateStatus();
         } else {
           showToast('Fehler beim Speichern der Einstellungen.', 'error');
         }
@@ -1277,6 +1365,14 @@
         const st = await res.json();
 
         statActiveSlots.textContent = st.active_slots_count;
+        const statActiveSub = document.getElementById('statActiveSub');
+        if (statActiveSub) {
+          if (st.total_raw_slots_count > st.active_slots_count) {
+            statActiveSub.textContent = `${st.active_slots_count} von ${st.total_raw_slots_count} im Zweitmarkt (gefiltert)`;
+          } else {
+            statActiveSub.textContent = 'Live auf dem Zweitmarkt';
+          }
+        }
         statLastCheck.textContent = st.last_check_time || '--:--:--';
         statTotalChecks.textContent = st.total_checks;
         statTotalAlerts.textContent = st.total_alerts_sent;
@@ -1370,6 +1466,21 @@
           lastSeenOffersCount = 0;
           offersCountBadge.style.display = 'none';
           emptyOffersState.style.display = 'block';
+
+          // Check if offers exist on platform but were filtered out
+          try {
+            const statusRes = await fetch('/api/status');
+            const st = await statusRes.json();
+            const emptyTitle = document.getElementById('emptyTitle');
+            const emptyDesc = document.getElementById('emptyDesc');
+            if (st.total_raw_slots_count > 0) {
+              emptyTitle.textContent = 'Keine Angebote entsprechen deinen Filtern';
+              emptyDesc.textContent = `Auf dem Zweitmarkt sind derzeit ${st.total_raw_slots_count} Zeitfenster online, aber keines passt zu deinem Datumsbereich, Wochentagsfilter, Mindestanzahl (${currentConfig.min_tickets || 1}) oder Preisen.`;
+            } else {
+              emptyTitle.textContent = 'Aktuell keine passenden Tickets im Zweitmarkt';
+              emptyDesc.textContent = 'Sobald jemand ein Ticket einstellt, das deinen Filterkriterien entspricht, schlägt der Monitor sofort Alarm!';
+            }
+          } catch(e) {}
         }
       } catch (err) {
         console.error('Error loading active slots:', err);

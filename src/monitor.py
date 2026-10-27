@@ -39,8 +39,27 @@ class TicketMonitor:
         self.next_check_time: Optional[datetime] = None
         self.total_checks: int = 0
         self.total_alerts_sent: int = 0
-        self.active_slots: List[SlotAvailability] = []
+        self.raw_active_slots: List[SlotAvailability] = []
         self.recent_logs: Deque[dict] = deque(maxlen=200)
+
+    @property
+    def active_slots(self) -> List[SlotAvailability]:
+        """Dynamically return active slots matching current filter settings."""
+        return self.get_filtered_active_slots()
+
+    def get_filtered_active_slots(self) -> List[SlotAvailability]:
+        """Filters all currently known bookable slots dynamically against the current configuration."""
+        filtered: List[SlotAvailability] = []
+        for item in self.raw_active_slots:
+            if not self.slot_matches_filter(item.slot):
+                continue
+            matching_offers = self.filter_offers(item.offers)
+            if not matching_offers:
+                continue
+            if len(matching_offers) < self.config.min_tickets:
+                continue
+            filtered.append(SlotAvailability(slot=item.slot, offers=matching_offers))
+        return filtered
 
     def log_event(self, level: str, message: str):
         now_str = datetime.now().strftime("%H:%M:%S")
@@ -55,17 +74,40 @@ class TicketMonitor:
         self._check_trigger_event.set()
 
     def slot_matches_filter(self, slot: EventSlot) -> bool:
-        """Check if slot matches weekday, time range, and excluded dates filters."""
-        # 1. Weekday filter
+        """Check if slot matches group, date range, weekday, time range, and excluded dates."""
+        # 0. Monitored groups check
+        if slot.group_id and slot.group_id not in self.config.monitored_groups:
+            return False
+
+        slot_date = slot.start_date_time.date()
+
+        # 1. Date Range Filter ("YYYY-MM-DD")
+        if self.config.date_from:
+            try:
+                from_d = datetime.strptime(self.config.date_from, "%Y-%m-%d").date()
+                if slot_date < from_d:
+                    return False
+            except ValueError:
+                pass
+
+        if self.config.date_to:
+            try:
+                to_d = datetime.strptime(self.config.date_to, "%Y-%m-%d").date()
+                if slot_date > to_d:
+                    return False
+            except ValueError:
+                pass
+
+        # 2. Weekday filter
         if slot.start_date_time.weekday() not in self.config.allowed_weekdays:
             return False
 
-        # 2. Excluded dates filter ("YYYY-MM-DD")
+        # 3. Excluded dates filter ("YYYY-MM-DD")
         date_str = slot.start_date_time.strftime("%Y-%m-%d")
         if date_str in self.config.excluded_dates:
             return False
 
-        # 3. Time filter (HH:MM)
+        # 4. Time filter (HH:MM)
         time_str = slot.start_date_time.strftime("%H:%M")
         if self.config.earliest_time and time_str < self.config.earliest_time:
             return False
@@ -116,14 +158,15 @@ class TicketMonitor:
                     self.log_event("ERROR", err_msg)
                 await asyncio.sleep(0.5)
 
-            self.active_slots = current_active_slots
+            self.raw_active_slots = current_active_slots
             self.total_checks += 1
             self.total_alerts_sent += new_alerts_count
             self.last_check_time = datetime.now()
 
+            filtered_count = len(self.get_filtered_active_slots())
             finish_msg = (
                 f"Prüfzyklus #{self.total_checks} fertig: "
-                f"{len(self.active_slots)} buchbare Slots aktiv, {new_alerts_count} neue Alerts."
+                f"{len(self.raw_active_slots)} Zweitmarkt-Slots online ({filtered_count} passend zu Filtern), {new_alerts_count} neue Alerts."
             )
             logger.info(finish_msg)
             self.log_event("SUCCESS" if new_alerts_count > 0 else "INFO", finish_msg)
@@ -163,10 +206,10 @@ class TicketMonitor:
         if not offers:
             return 0, None
 
-        # Build raw availability object for UI viewing
+        # Build raw availability object for storage & dynamic filtering
         availability = SlotAvailability(slot=slot, offers=offers)
 
-        # Apply slot filters (weekday, time, excluded dates)
+        # Apply slot filters (group, date range, weekday, time, excluded dates)
         if not self.slot_matches_filter(slot):
             logger.debug(f"Slot {slot.sync_id} ({slot.formatted_start}) entspricht nicht den Zeit-/Datums-Filtern.")
             return 0, availability
@@ -191,12 +234,11 @@ class TicketMonitor:
 
         found_msg = (
             f"🎉 NEUE TICKETS: {slot.group_name} am {slot.formatted_start} "
-            f"({len(new_offers)} Angebot(e))!"
+            f"({len(new_offers)} passende(s) Angebot(e))!"
         )
         logger.info(found_msg)
         self.log_event("ALERT", found_msg)
 
-        # Send alert
         # Update notifier webhook in case config was edited via GUI
         self.notifier.webhook_url = self.config.discord_webhook_url
         self.notifier.mention = self.config.discord_mention
@@ -226,7 +268,6 @@ class TicketMonitor:
 
             jitter = random.uniform(-self.config.check_interval_jitter, self.config.check_interval_jitter)
             sleep_time = max(5.0, self.config.check_interval_seconds + jitter)
-            self.next_check_time = datetime.now() + asyncio.to_timedelta(seconds=sleep_time) if hasattr(asyncio, 'to_timedelta') else None
 
             # Reset trigger event
             self._check_trigger_event.clear()

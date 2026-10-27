@@ -26,6 +26,8 @@ class ConfigUpdateRequest(BaseModel):
     only_adults: Optional[bool] = None
     monitored_groups: Optional[List[int]] = None
     allowed_weekdays: Optional[List[int]] = None
+    date_from: Optional[str] = None
+    date_to: Optional[str] = None
     earliest_time: Optional[str] = None
     latest_time: Optional[str] = None
     max_price_eur: Optional[float] = None
@@ -48,6 +50,7 @@ def create_app(monitor: TicketMonitor) -> FastAPI:
     @app.get("/api/status")
     async def get_status():
         last_check_str = monitor.last_check_time.strftime("%H:%M:%S") if monitor.last_check_time else None
+        filtered = monitor.get_filtered_active_slots()
         return {
             "is_running": monitor._is_running,
             "paused": monitor.config.paused,
@@ -55,7 +58,8 @@ def create_app(monitor: TicketMonitor) -> FastAPI:
             "last_check_time": last_check_str,
             "total_checks": monitor.total_checks,
             "total_alerts_sent": monitor.total_alerts_sent,
-            "active_slots_count": len(monitor.active_slots),
+            "active_slots_count": len(filtered),
+            "total_raw_slots_count": len(monitor.raw_active_slots),
             "known_groups": DEFAULT_KNOWN_GROUPS,
             "weekday_names": WEEKDAY_NAMES,
         }
@@ -63,7 +67,7 @@ def create_app(monitor: TicketMonitor) -> FastAPI:
     @app.get("/api/active-slots")
     async def get_active_slots():
         slots_data = []
-        for avail in monitor.active_slots:
+        for avail in monitor.get_filtered_active_slots():
             slot = avail.slot
             offers_data = [
                 {

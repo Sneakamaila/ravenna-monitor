@@ -41,6 +41,8 @@ class Config:
 
     # Clever additional filters
     allowed_weekdays: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4, 5, 6])
+    date_from: Optional[str] = None      # Format "YYYY-MM-DD", e.g. "2026-11-27"
+    date_to: Optional[str] = None        # Format "YYYY-MM-DD", e.g. "2026-12-20"
     earliest_time: Optional[str] = None  # Format "HH:MM", e.g. "14:00"
     latest_time: Optional[str] = None    # Format "HH:MM", e.g. "20:00"
     max_price_eur: Optional[float] = None  # e.g. 20.00
@@ -106,6 +108,8 @@ class Config:
 
         earliest = os.getenv("EARLIEST_TIME", "").strip() or None
         latest = os.getenv("LATEST_TIME", "").strip() or None
+        date_from = os.getenv("DATE_FROM", "").strip() or None
+        date_to = os.getenv("DATE_TO", "").strip() or None
 
         max_price_raw = os.getenv("MAX_PRICE_EUR", "").strip()
         max_price: Optional[float] = None
@@ -137,6 +141,8 @@ class Config:
             state_file_path=state_file,
             log_level=log_level,
             allowed_weekdays=allowed_weekdays,
+            date_from=date_from,
+            date_to=date_to,
             earliest_time=earliest,
             latest_time=latest,
             max_price_eur=max_price,
@@ -156,6 +162,8 @@ class Config:
             "only_adults": self.only_adults,
             "monitored_groups": self.monitored_groups,
             "allowed_weekdays": self.allowed_weekdays,
+            "date_from": self.date_from or "",
+            "date_to": self.date_to or "",
             "earliest_time": self.earliest_time or "",
             "latest_time": self.latest_time or "",
             "max_price_eur": self.max_price_eur,
@@ -194,6 +202,12 @@ class Config:
             self.monitored_groups = [int(g) for g in data["monitored_groups"] if str(g).isdigit()]
         if "allowed_weekdays" in data and isinstance(data["allowed_weekdays"], list):
             self.allowed_weekdays = [int(w) for w in data["allowed_weekdays"] if 0 <= int(w) <= 6]
+        if "date_from" in data:
+            val = str(data["date_from"]).strip()
+            self.date_from = val or None
+        if "date_to" in data:
+            val = str(data["date_to"]).strip()
+            self.date_to = val or None
         if "earliest_time" in data:
             val = str(data["earliest_time"]).strip()
             self.earliest_time = val or None
@@ -222,6 +236,8 @@ class Config:
             f"ONLY_ADULTS={'true' if self.only_adults else 'false'}\n",
             f"MONITORED_GROUPS={','.join(str(g) for g in self.monitored_groups)}\n",
             f"ALLOWED_WEEKDAYS={','.join(str(w) for w in self.allowed_weekdays)}\n",
+            f"DATE_FROM={self.date_from or ''}\n",
+            f"DATE_TO={self.date_to or ''}\n",
             f"EARLIEST_TIME={self.earliest_time or ''}\n",
             f"LATEST_TIME={self.latest_time or ''}\n",
             f"MAX_PRICE_EUR={self.max_price_eur if self.max_price_eur is not None else ''}\n",
