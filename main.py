@@ -3,11 +3,13 @@ import asyncio
 import logging
 import signal
 import sys
+import uvicorn
 from src.config import Config
 from src.discord_notifier import DiscordNotifier
 from src.monitor import TicketMonitor
 from src.reservix_client import ReservixClient
 from src.tracker import OfferTracker
+from src.web.app import create_app
 
 
 def setup_logging(log_level: str):
@@ -20,10 +22,13 @@ def setup_logging(log_level: str):
 
 async def async_main():
     parser = argparse.ArgumentParser(
-        description="Überwacht den Reservix-Zweitmarkt für den Weihnachtsmarkt in der Ravennaschlucht."
+        description="Überwacht den Reservix-Zweitmarkt für den Weihnachtsmarkt in der Ravennaschlucht samt schöner Web-GUI."
     )
     parser.add_argument("--once", action="store_true", help="Führt nur einen einzigen Prüfzyklus durch und beendet sich.")
     parser.add_argument("--test-discord", action="store_true", help="Sendet eine Test-Nachricht an den konfigurierten Discord Webhook.")
+    parser.add_argument("--no-web", "--cli", action="store_true", help="Deaktiviert das Web-UI und läuft rein in der Konsole.")
+    parser.add_argument("--port", type=int, default=None, help="Port für die Web-Oberfläche (Standard: 8080).")
+    parser.add_argument("--host", type=str, default=None, help="Host für die Web-Oberfläche (Standard: 0.0.0.0).")
     parser.add_argument("--interval", type=int, default=None, help="Prüfintervall in Sekunden.")
     parser.add_argument("--min-tickets", type=int, default=None, help="Mindestanzahl verfügbarer Tickets.")
     parser.add_argument("--only-adults", action="store_true", help="Nur Tickets für Erwachsene berücksichtigen.")
@@ -44,6 +49,10 @@ async def async_main():
         config.only_adults = True
     if args.dry_run:
         config.discord_webhook_url = None
+    if args.port is not None:
+        config.web_port = args.port
+    if args.host is not None:
+        config.web_host = args.host
 
     setup_logging(config.log_level)
     logger = logging.getLogger("main")
@@ -90,23 +99,48 @@ async def async_main():
         try:
             loop.add_signal_handler(sig, signal_handler)
         except NotImplementedError:
-            # Signal handlers not implemented on Windows event loop
             pass
 
+    # Start background monitor loop
     monitor_task = asyncio.create_task(monitor.run())
 
-    try:
+    if not args.no_web:
+        # Start Web UI via Uvicorn server in same asyncio loop
+        app = create_app(monitor)
+        uvi_config = uvicorn.Config(
+            app=app,
+            host=config.web_host,
+            port=config.web_port,
+            log_level="warning",
+            access_log=False,
+        )
+        server = uvicorn.Server(uvi_config)
+
+        logger.info("===============================================================")
+        logger.info(f"🎄 Ravenna-Schlucht Ticket-Monitor Web-UI gestartet!")
+        logger.info(f"👉 Öffne im Browser: http://localhost:{config.web_port}")
+        logger.info("===============================================================")
+
+        async def run_server():
+            await server.serve()
+            stop_event.set()
+
+        server_task = asyncio.create_task(run_server())
+
         await stop_event.wait()
-    except (asyncio.CancelledError, KeyboardInterrupt):
-        signal_handler()
-    finally:
-        monitor_task.cancel()
-        try:
-            await monitor_task
-        except asyncio.CancelledError:
-            pass
-        await client.close()
-        logger.info("Monitor sauber beendet.")
+        server.should_exit = True
+        await server_task
+    else:
+        logger.info("Monitor läuft im reinen CLI-Modus (ohne Web-UI).")
+        await stop_event.wait()
+
+    monitor_task.cancel()
+    try:
+        await monitor_task
+    except asyncio.CancelledError:
+        pass
+    await client.close()
+    logger.info("Monitor sauber beendet.")
 
 
 def main():

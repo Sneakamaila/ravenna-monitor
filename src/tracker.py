@@ -76,3 +76,9 @@ class OfferTracker:
 
     def is_known(self, offer_id: int) -> bool:
         return str(offer_id) in self.seen_offers
+
+    def clear(self):
+        """Reset the seen offers cache."""
+        self.seen_offers = {}
+        self.save()
+        logger.info("Cache für bereits gesehene Angebote wurde geleert.")

@@ -23,6 +23,10 @@ RUN mkdir -p /app/data && chown -R appuser:appuser /app
 
 USER appuser
 
-ENV STATE_FILE_PATH=/app/data/seen_offers.json
+ENV STATE_FILE_PATH=/app/data/seen_offers.json \
+    WEB_HOST=0.0.0.0 \
+    WEB_PORT=8080
+
+EXPOSE 8080
 
 CMD ["python", "main.py"]
