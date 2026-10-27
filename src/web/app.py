@@ -129,13 +129,24 @@ def create_app(monitor: TicketMonitor) -> FastAPI:
     @app.post("/api/config")
     async def update_config(req: ConfigUpdateRequest):
         data = req.model_dump(exclude_unset=True)
+        old_webhook = monitor.config.discord_webhook_url
         monitor.config.update_from_dict(data)
+        new_webhook = monitor.config.discord_webhook_url
+
         # Update notifier immediately
-        monitor.notifier.webhook_url = monitor.config.discord_webhook_url
+        monitor.notifier.webhook_url = new_webhook
         monitor.notifier.mention = monitor.config.discord_mention
-        # Save to .env
-        monitor.config.save_to_env_file()
-        logger.info("Konfiguration über Web-UI aktualisiert und in .env gespeichert.")
+
+        # Save to persistent storage (/app/data/config.json) AND .env
+        monitor.config.save()
+        logger.info("Konfiguration über Web-UI aktualisiert und persistent gespeichert.")
+
+        # If webhook URL was newly entered or changed, clear seen cache so active tickets are alerted immediately
+        if new_webhook and new_webhook != old_webhook:
+            monitor.tracker.clear()
+            monitor.log_event("SUCCESS", "Discord-Webhook konfiguriert: Cache geleert, damit vorhandene Tickets sofort gemeldet werden!")
+            monitor.trigger_check_now()
+
         return {"status": "ok", "config": monitor.config.to_dict()}
 
     @app.post("/api/check-now")
@@ -148,7 +159,7 @@ def create_app(monitor: TicketMonitor) -> FastAPI:
     @app.post("/api/toggle-pause")
     async def toggle_pause():
         monitor.config.paused = not monitor.config.paused
-        monitor.config.save_to_env_file()
+        monitor.config.save()
         action = "pausiert" if monitor.config.paused else "fortgesetzt"
         monitor.log_event("INFO", f"Monitor wurde über Web-UI {action}.")
         return {"status": "ok", "paused": monitor.config.paused}
@@ -156,7 +167,8 @@ def create_app(monitor: TicketMonitor) -> FastAPI:
     @app.post("/api/reset-cache")
     async def reset_cache():
         monitor.tracker.clear()
-        monitor.log_event("WARNING", "Cache bereits gesehener Angebote wurde geleert.")
+        monitor.log_event("WARNING", "Cache bereits gesehener Angebote wurde geleert. Prüfe jetzt erneut...")
+        monitor.trigger_check_now()
         return {"status": "ok"}
 
     @app.post("/api/test-discord")

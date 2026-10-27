@@ -1,4 +1,5 @@
 from datetime import datetime
+import pytest
 from src.discord_notifier import DiscordNotifier
 from src.models import EventSlot, TicketOffer
 
@@ -33,3 +34,24 @@ def test_build_offer_embed():
     assert "1x" in fields["🏷️ Preiskategorien"]
     assert "14,85 €" in fields["💰 Gesamtsumme"]
     assert slot.buy_url in fields["🛒 Direktlink zum Kauf"]
+
+
+@pytest.mark.anyio
+async def test_send_notification_no_webhook_returns_false():
+    notifier = DiscordNotifier(webhook_url=None)
+    dt = datetime(2026, 12, 11, 14, 35)
+    slot = EventSlot(
+        id=1,
+        sync_id="2601831",
+        name="Weihnachtsmarkt Ravenna",
+        start_date_time=dt,
+        end_date_time=dt,
+        url_path="p",
+        is_bookable=True,
+    )
+    offer = TicketOffer(id=1, price_cents=935, currency="EUR", price_category="Erwachsene", status="BOOKABLE")
+
+    result = await notifier.send_notification(slot, [offer])
+    # Must return False so that dry-run does not falsely increment alert counter
+    assert result is False
+

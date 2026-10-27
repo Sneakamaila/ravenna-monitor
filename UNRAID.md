@@ -47,3 +47,4 @@ Auf deinem Unraid-Server belegt **SABnzbd** bereits den Standardport **`8080`**.
   ```bash
   cd /mnt/user/appdata/ravenna-monitor && git pull && docker compose up -d --build
   ```
+  *(Alle Einstellungen wie Discord-Webhook, Filter und der Cache gemeldeter Tickets werden dauerhaft im persistenten Appdata-Ordner unter `/mnt/user/appdata/ravenna-monitor/data/` gespeichert und bleiben bei jedem Update zu 100 % erhalten.)*

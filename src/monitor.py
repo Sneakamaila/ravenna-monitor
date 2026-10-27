@@ -239,22 +239,37 @@ class TicketMonitor:
         if not new_offers:
             return 0, availability
 
-        found_msg = (
-            f"🎉 NEUE TICKETS: {slot.group_name} am {slot.formatted_start} "
-            f"({len(new_offers)} passende(s) Angebot(e))!"
-        )
-        logger.info(found_msg)
-        self.log_event("ALERT", found_msg)
-
-        # Update notifier webhook in case config was edited via GUI
+        # Ensure notifier has the latest webhook settings from config
         self.notifier.webhook_url = self.config.discord_webhook_url
         self.notifier.mention = self.config.discord_mention
+
+        if not self.config.discord_webhook_url:
+            dry_msg = (
+                f"🎟️ Ticket-Fund: {slot.group_name} am {slot.formatted_start} "
+                f"({len(new_offers)} Ticket(s)), aber kein Discord-Webhook hinterlegt."
+            )
+            logger.info(dry_msg)
+            self.log_event("INFO", dry_msg)
+            # In dry-run mode (no webhook), do NOT mark alerted and do NOT increment total_alerts_sent!
+            return 0, availability
 
         success = await self.notifier.send_notification(slot, new_offers)
         if success:
             self.tracker.mark_alerted(slot, new_offers)
+            alert_msg = (
+                f"📨 Discord-Alert gesendet: {slot.group_name} am {slot.formatted_start} "
+                f"({len(new_offers)} Ticket(s))!"
+            )
+            logger.info(alert_msg)
+            self.log_event("ALERT", alert_msg)
             return len(new_offers), availability
         else:
+            err_msg = (
+                f"⚠️ Discord-Alert fehlgeschlagen für {slot.group_name} am {slot.formatted_start}. "
+                f"Prüfe die Webhook-URL in den Einstellungen!"
+            )
+            logger.error(err_msg)
+            self.log_event("ERROR", err_msg)
             return 0, availability
 
     async def run(self):

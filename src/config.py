@@ -1,8 +1,12 @@
+import json
+import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 from dotenv import load_dotenv
+
+logger = logging.getLogger(__name__)
 
 # Load .env file if present
 load_dotenv()
@@ -53,6 +57,44 @@ class Config:
     web_port: int = 8080
     paused: bool = False
     env_file_path: Path = field(default_factory=lambda: Path(".env"))
+    config_file_path: Optional[Path] = None
+
+    @property
+    def persistent_config_path(self) -> Path:
+        if self.config_file_path:
+            return self.config_file_path
+        return self.state_file_path.parent / "config.json"
+
+    def load_from_persistent_file(self):
+        """Loads saved user settings from the persistent data directory (e.g. /app/data/config.json)."""
+        path = self.persistent_config_path
+        if path.exists():
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                if isinstance(data, dict):
+                    self.update_from_dict(data)
+                    logger.info(f"Persistente Konfiguration erfolgreich aus {path} geladen.")
+            except Exception as e:
+                logger.warning(f"Konnte persistente Konfiguration {path} nicht laden: {e}")
+
+    def save_to_persistent_file(self):
+        """Persists current configuration as JSON in the data volume (survives container updates)."""
+        path = self.persistent_config_path
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_file = path.with_suffix(".tmp")
+            with open(tmp_file, "w", encoding="utf-8") as f:
+                json.dump(self.to_dict(), f, indent=2, ensure_ascii=False)
+            os.replace(tmp_file, path)
+            logger.info(f"Konfiguration persistent in {path} gespeichert.")
+        except Exception as e:
+            logger.warning(f"Konnte Konfiguration nicht persistent in {path} speichern: {e}")
+
+    def save(self):
+        """Save configuration both to persistent JSON file in data volume and .env file."""
+        self.save_to_persistent_file()
+        self.save_to_env_file()
 
     @classmethod
     def from_env(cls) -> "Config":
@@ -139,7 +181,7 @@ class Config:
 
         paused = os.getenv("MONITOR_PAUSED", "false").strip().lower() in ("true", "1", "yes")
 
-        return cls(
+        cfg = cls(
             discord_webhook_url=webhook,
             discord_mention=mention,
             check_interval_seconds=interval,
@@ -160,6 +202,9 @@ class Config:
             web_port=web_port,
             paused=paused,
         )
+        # Load any user settings previously saved via Web UI in the persistent data volume
+        cfg.load_from_persistent_file()
+        return cfg
 
     def to_dict(self) -> Dict[str, Any]:
         return {

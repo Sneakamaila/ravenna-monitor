@@ -17,6 +17,7 @@ def monitor_instance(tmp_path: Path):
         discord_webhook_url="https://discord.com/api/webhooks/dummy",
         state_file_path=tmp_path / "seen.json",
         env_file_path=tmp_path / ".env",
+        config_file_path=tmp_path / "config.json",
     )
     tracker = OfferTracker(config.state_file_path)
     client = ReservixClient()
@@ -272,5 +273,64 @@ async def test_active_slots_show_all(test_app, monitor_instance):
         res2 = await ac.get("/api/active-slots?show_all=true")
         assert len(res2.json()) == 1
         assert res2.json()[0]["sync_id"] == "999"
+
+
+@pytest.mark.anyio
+async def test_config_persistence_across_reloads(test_app, monitor_instance, tmp_path):
+    async with httpx.AsyncClient(transport=httpx.ASGITransport(app=test_app), base_url="http://test") as ac:
+        resp = await ac.post("/api/config", json={
+            "discord_webhook_url": "https://discord.com/api/webhooks/persistent",
+            "discord_mention": "@rolename",
+            "min_tickets": 3,
+            "only_adults": True,
+            "date_from": "2026-12-01",
+            "date_to": "2026-12-10",
+        })
+        assert resp.status_code == 200
+
+    # Verify config.json file was written to disk
+    cfg_file = tmp_path / "config.json"
+    assert cfg_file.exists()
+
+    # Create a new config simulating container restart / update
+    new_cfg = Config(state_file_path=tmp_path / "seen.json", config_file_path=cfg_file)
+    new_cfg.load_from_persistent_file()
+
+    assert new_cfg.discord_webhook_url == "https://discord.com/api/webhooks/persistent"
+    assert new_cfg.discord_mention == "@rolename"
+    assert new_cfg.min_tickets == 3
+    assert new_cfg.only_adults is True
+    assert new_cfg.date_from == "2026-12-01"
+    assert new_cfg.date_to == "2026-12-10"
+
+
+@pytest.mark.anyio
+async def test_dry_run_does_not_mark_alerted(monitor_instance):
+    # When no webhook is configured
+    monitor_instance.config.discord_webhook_url = None
+    monitor_instance.notifier.webhook_url = None
+
+    slot = EventSlot(
+        id=55,
+        sync_id="555",
+        name="Slot 55",
+        start_date_time=datetime(2026, 12, 5, 15, 0),
+        end_date_time=datetime(2026, 12, 5, 17, 0),
+        url_path="p55",
+        is_bookable=True,
+    )
+    offer = TicketOffer(id=5551, price_cents=1000, currency="EUR", price_category="Erwachsene", status="BOOKABLE")
+
+    # Mock client fetch
+    async def mock_fetch(sync_id, path=""):
+        return [offer]
+    monitor_instance.client.fetch_marketplace_offers = mock_fetch
+
+    alerts, avail = await monitor_instance.check_slot_offers(slot)
+    # Alerts should be 0 because no webhook was configured
+    assert alerts == 0
+    # Offer should NOT be marked alerted in tracker
+    assert not monitor_instance.tracker.is_known(5551)
+
 
 

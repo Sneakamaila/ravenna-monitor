@@ -27,20 +27,23 @@ class DiscordNotifier:
         client: Optional[httpx.AsyncClient] = None,
     ) -> bool:
         """Send a rich Discord embed notification for newly found tickets."""
-        if not self.webhook_url:
+        if not self.webhook_url or not self.webhook_url.strip():
             logger.info(
                 f"[DRY-RUN] Neue Tickets gefunden für {slot.name} ({slot.formatted_start}) - "
                 f"{len(offers)} Angebot(e). Kein Webhook konfiguriert."
             )
             for o in offers:
                 logger.info(f"   -> Angebot #{o.id}: {o.price_category} ({o.formatted_price})")
-            return True
+            return False
 
         embed = self._build_offer_embed(slot, offers)
         payload = {
-            "content": self.mention if self.mention else None,
+            "username": "Ravenna Ticket-Wächter",
+            "avatar_url": "https://raw.githubusercontent.com/Sneakamaila/ravenna-monitor/main/assets/icon.png",
             "embeds": [embed],
         }
+        if self.mention and self.mention.strip():
+            payload["content"] = self.mention.strip()
 
         return await self._post_webhook(payload, client=client)
 
@@ -160,6 +163,7 @@ class DiscordNotifier:
             client = httpx.AsyncClient(timeout=10.0)
             should_close = True
 
+        resp = None
         try:
             for attempt in range(3):
                 resp = await client.post(self.webhook_url, json=payload)
@@ -169,10 +173,15 @@ class DiscordNotifier:
                     logger.warning(f"Discord Rate Limit erreicht. Warte {retry_after}s...")
                     await asyncio.sleep(float(retry_after))
                     continue
+                if resp.status_code >= 400:
+                    logger.error(
+                        f"Discord Webhook fehlgeschlagen mit Status {resp.status_code}: {resp.text}"
+                    )
                 resp.raise_for_status()
                 return True
         except Exception as e:
-            logger.error(f"Fehler beim Senden des Discord-Webhooks: {e}")
+            err_details = f" (Status {resp.status_code}: {resp.text})" if resp is not None else ""
+            logger.error(f"Fehler beim Senden des Discord-Webhooks: {e}{err_details}")
             return False
         finally:
             if should_close:
