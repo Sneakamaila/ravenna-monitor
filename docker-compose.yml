@@ -1,13 +1,19 @@
 services:
   ravenna-monitor:
     build: .
+    image: ravenna-monitor:latest
     container_name: ravenna-monitor
     restart: unless-stopped
     ports:
-      # Port 8088 auf dem Host (vermeidet Kollision mit SABnzbd auf 8080)
+      # Port 8088 auf Unraid Host (vermeidet Kollision mit SABnzbd auf 8080)
       - "${HOST_PORT:-8088}:8080"
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      - STATE_FILE_PATH=/app/data/seen_offers.json
+      - WEB_PORT=8080
+      - WEB_HOST=0.0.0.0
     volumes:
       - ./data:/app/data
     labels:

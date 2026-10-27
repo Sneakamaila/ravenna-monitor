@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <Container version="2">
   <Name>ravenna-monitor</Name>
-  <Repository>ghcr.io/sneakamaila/ravenna-monitor:latest</Repository>
+  <Repository>ravenna-monitor:latest</Repository>
   <Registry>https://github.com/Sneakamaila/ravenna-monitor</Registry>
   <Network>bridge</Network>
   <MyIP/>

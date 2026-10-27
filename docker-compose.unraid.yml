@@ -25,7 +25,7 @@ services:
       - WEB_HOST=0.0.0.0
     volumes:
       # Unraid-Standard-Appdata-Pfad für persistente Einstellungen & Cache
-      - /mnt/user/appdata/ravenna-monitor:/app/data
+      - /mnt/user/appdata/ravenna-monitor/data:/app/data
     labels:
       # Unraid Docker-Manager Integration für WebUI-Button und Icon
       net.unraid.docker.managed: "dockerman"
