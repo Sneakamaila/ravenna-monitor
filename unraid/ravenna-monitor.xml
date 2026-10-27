@@ -1,0 +1,100 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>ravenna-monitor</Name>
+  <Repository>ghcr.io/sneakamaila/ravenna-monitor:latest</Repository>
+  <Registry>https://github.com/Sneakamaila/ravenna-monitor</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>bash</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/Sneakamaila/ravenna-monitor</Support>
+  <Project>https://github.com/Sneakamaila/ravenna-monitor</Project>
+  <Overview>
+    Überwacht den Reservix-Zweitmarkt für den Weihnachtsmarkt in der Ravennaschlucht. Meldet neue Rückläufer-Tickets per Discord und bietet ein modernes Web-Dashboard mit Live-Tickets, Audio-Alarm und smarten Filtern.
+  </Overview>
+  <Category>Tools: Other: Status:Stable</Category>
+  <WebUI>http://[IP]:[PORT:8088]</WebUI>
+  <TemplateURL>https://raw.githubusercontent.com/Sneakamaila/ravenna-monitor/main/unraid/ravenna-monitor.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/Sneakamaila/ravenna-monitor/main/assets/icon.png</Icon>
+  <ExtraParams>--restart=unless-stopped</ExtraParams>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled>2026-10-27</DateInstalled>
+  <DonateText/>
+  <DonateLink/>
+  <Description>
+    🎄 Ravenna-Schlucht Ticket-Monitor für Unraid.
+    Automatische Benachrichtigung bei neuen Zweitmarkt-Karten samt Direkt-Kauflink und Web-Dashboard.
+  </Description>
+  <Networking>
+    <Mode>bridge</Mode>
+    <Publish>
+      <Port>
+        <HostPort>8088</HostPort>
+        <ContainerPort>8080</ContainerPort>
+        <Protocol>tcp</Protocol>
+      </Port>
+    </Publish>
+  </Networking>
+  <Data>
+    <Volume>
+      <HostDir>/mnt/user/appdata/ravenna-monitor</HostDir>
+      <ContainerDir>/app/data</ContainerDir>
+      <Mode>rw</Mode>
+    </Volume>
+  </Data>
+  <Environment>
+    <Variable>
+      <Value></Value>
+      <Name>DISCORD_WEBHOOK_URL</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value></Value>
+      <Name>DISCORD_MENTION</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>1</Value>
+      <Name>MIN_TICKETS</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>false</Value>
+      <Name>ONLY_ADULTS</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>30</Value>
+      <Name>CHECK_INTERVAL_SECONDS</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>5</Value>
+      <Name>CHECK_INTERVAL_JITTER</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>/app/data/seen_offers.json</Value>
+      <Name>STATE_FILE_PATH</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>8080</Value>
+      <Name>WEB_PORT</Name>
+      <Mode/>
+    </Variable>
+    <Variable>
+      <Value>0.0.0.0</Value>
+      <Name>WEB_HOST</Name>
+      <Mode/>
+    </Variable>
+  </Environment>
+  <Config Name="WebUI Port" Target="8080" Default="8088" Mode="tcp" Description="Host-Port für das Web-Dashboard (8088 vermeidet Konflikte mit SABnzbd auf 8080)" Type="Port" Display="always" Required="true" Mask="false">8088</Config>
+  <Config Name="Appdata Speicher" Target="/app/data" Default="/mnt/user/appdata/ravenna-monitor" Mode="rw" Description="Speicherort für Cache (seen_offers.json) und Konfiguration" Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/ravenna-monitor</Config>
+  <Config Name="Discord Webhook URL" Target="DISCORD_WEBHOOK_URL" Default="" Mode="" Description="Discord Webhook URL für Benachrichtigungen (kann auch im WebUI eingetragen werden)" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Discord Mention" Target="DISCORD_MENTION" Default="" Mode="" Description="Erwähnung bei Alarm (z. B. @everyone oder &lt;@&amp;RollenID&gt;)" Type="Variable" Display="always" Required="false" Mask="false"></Config>
+  <Config Name="Mindestanzahl Tickets" Target="MIN_TICKETS" Default="1" Mode="" Description="Mindestanzahl Tickets pro Timeslot (z. B. 2 für Paare)" Type="Variable" Display="always" Required="false" Mask="false">1</Config>
+  <Config Name="Nur Erwachsene" Target="ONLY_ADULTS" Default="false" Mode="" Description="Nur Tickets für Erwachsene melden (true/false)" Type="Variable" Display="always" Required="false" Mask="false">false</Config>
+  <Config Name="Prüfintervall" Target="CHECK_INTERVAL_SECONDS" Default="30" Mode="" Description="Intervall in Sekunden zwischen Abfrage-Zyklen" Type="Variable" Display="advanced" Required="false" Mask="false">30</Config>
+</Container>

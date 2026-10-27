@@ -4,11 +4,16 @@ services:
     container_name: ravenna-monitor
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      # Port 8088 auf dem Host (vermeidet Kollision mit SABnzbd auf 8080)
+      - "${HOST_PORT:-8088}:8080"
     env_file:
       - .env
     volumes:
       - ./data:/app/data
+    labels:
+      net.unraid.docker.managed: "dockerman"
+      net.unraid.docker.webui: "http://[IP]:[PORT:8088]"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/Sneakamaila/ravenna-monitor/main/assets/icon.png"
     logging:
       driver: "json-file"
       options:

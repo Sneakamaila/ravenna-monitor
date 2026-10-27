@@ -92,22 +92,32 @@ cp .env.example .env
 
 ---
 
-### Option A: Betrieb mit Docker (Empfohlen für 24/7)
+### Option A: Betrieb auf Unraid (Maßgeschneidert)
+
+👉 Siehe die vollständige [Unraid Anleitung (UNRAID.md)](file:///home/hendrik/ravenna-monitor/UNRAID.md).
+
+- **Host-Port:** `8088` (kollidiert **nicht** mit SABnzbd auf `8080`)
+- **WebUI-Button:** Direkt im Unraid Docker-Tab integriert mit 🎄-Logo
+- **Appdata:** `/mnt/user/appdata/ravenna-monitor`
+
+---
+
+### Option B: Betrieb mit Docker Compose (Allgemein)
 
 ```bash
-# Monitor mit Web-UI im Hintergrund starten (Port 8080)
+# Monitor mit Web-UI im Hintergrund starten (Port 8088)
 docker compose up -d
 
 # Logs ansehen
 docker compose logs -f
 
 # Web-UI öffnen:
-# http://localhost:8080 (oder IP deines Servers)
+# http://localhost:8088 (oder IP deines Servers)
 ```
 
 ---
 
-### Option B: Lokaler Betrieb mit Python
+### Option C: Lokaler Betrieb mit Python
 
 Voraussetzung: Python 3.10+
 

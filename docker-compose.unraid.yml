@@ -1,0 +1,38 @@
+# ========================================================
+# 🎄 Ravenna-Schlucht Ticket-Monitor für Unraid Compose
+# ========================================================
+# Zugeschnitten auf dein Unraid-Setup (192.168.178.47)
+# Port 8088 verhindert Kollisionen mit SABnzbd (8080) & Zigbee2MQTT (8090)
+
+services:
+  ravenna-monitor:
+    build: .
+    image: ravenna-monitor:latest
+    container_name: ravenna-monitor
+    restart: unless-stopped
+    ports:
+      # Host-Port 8088 -> Container-Port 8080 (vermeidet Port-Konflikt mit sabnzbd auf 8080)
+      - "8088:8080"
+    environment:
+      - DISCORD_WEBHOOK_URL=
+      - DISCORD_MENTION=
+      - CHECK_INTERVAL_SECONDS=30
+      - CHECK_INTERVAL_JITTER=5
+      - MIN_TICKETS=1
+      - ONLY_ADULTS=false
+      - STATE_FILE_PATH=/app/data/seen_offers.json
+      - WEB_PORT=8080
+      - WEB_HOST=0.0.0.0
+    volumes:
+      # Unraid-Standard-Appdata-Pfad für persistente Einstellungen & Cache
+      - /mnt/user/appdata/ravenna-monitor:/app/data
+    labels:
+      # Unraid Docker-Manager Integration für WebUI-Button und Icon
+      net.unraid.docker.managed: "dockerman"
+      net.unraid.docker.webui: "http://[IP]:[PORT:8088]"
+      net.unraid.docker.icon: "https://raw.githubusercontent.com/Sneakamaila/ravenna-monitor/main/assets/icon.png"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
